@@ -96,36 +96,20 @@ def get_histories(cache=None):
 
 
 def analyze(histories):
-    indexes = {}
     earlier = {}  # Label to Volume Market Cap Rank
     now = None
     lru_cache = {}  # Mapping of coin name to the last event we saw it in
     adder_cache = {}  # Mapping of coin name to the number of times seen
 
-    while True:
-        # Get the next earliest timestamp
-        min_timestamp = time.time()
-        for history in histories:
-            index = indexes.get(history['primaryname'], 0)
-            if index >= len(history['data']):
-                continue  # ? This might need to be a delete
-            event = history['data'][index]
-            if event['Timestamp'] < min_timestamp:
-                min_timestamp = event['Timestamp']
-
+    for event_cluster in as_event_stream(histories):
+        # Generate the updated view of the world of our coins
         now = dict(earlier)
+        for event in event_cluster['Events']:
+            now[event['primaryname']] = event['Volume'] * event['Price']
 
-        # Get every update at this time
-        for history in histories:
-            index = indexes.get(history['primaryname'], 0)
-            if index >= len(history['data']):
-                continue  # ? This might need to be a delete
-            event = history['data'][index]
-            if event['Timestamp'] == min_timestamp:
-                indexes[history['primaryname']] = index + 1
-                now[history['primaryname']] = event['Volume'] * event['Price']
-
-        readable_time = datetime.datetime.utcfromtimestamp(min_timestamp)
+        # Print current timestamp for debugging and scale
+        timestamp = event_cluster['Timestamp']
+        readable_time = datetime.datetime.utcfromtimestamp(timestamp)
         LOGGER.debug('Timestamp: %s', readable_time)
 
         # Ignore early seed data where all values are 0
@@ -175,6 +159,38 @@ def analyze(histories):
             del lru_cache[name]
 
         earlier = dict(now)
+
+
+def as_event_stream(histories):
+    indexes = {}
+    while True:
+        # Get the next earliest timestamp
+        min_timestamp = time.time()
+        for history in histories:
+            index = indexes.get(history['primaryname'], 0)
+            if index >= len(history['data']):
+                continue  # ? This might need to be a delete
+            event = history['data'][index]
+            if event['Timestamp'] < min_timestamp:
+                min_timestamp = event['Timestamp']
+
+        # Get every update at this time
+        events = []
+        for history in histories:
+            index = indexes.get(history['primaryname'], 0)
+            if index >= len(history['data']):
+                continue  # ? This might need to be a delete
+            event = history['data'][index]
+            event['primaryname'] = history['primaryname']
+            event['label'] = history['label']
+            if event['Timestamp'] == min_timestamp:
+                indexes[history['primaryname']] = index + 1
+                events.append(event)
+
+        yield {
+            'Timestamp': min_timestamp,
+            'Events': events
+        }
 
 
 def main():
