@@ -61,7 +61,7 @@ def get_coin_names():
     return [re.sub(r'\/BTC$', '', market['Name']) for market in markets]
 
 
-def get_history(name, days=30):
+def get_history(name, days=90):
     '''
     Returns historical data given the name of the coin
     '''
@@ -83,7 +83,7 @@ def get_history(name, days=30):
     return json.loads(response.text)
 
 
-def get_histories(cache=None):
+def get_histories(cache='tmp_cache.json'):
     if cache:
         LOGGER.debug('Loading from cache')
         with open('histories.json', 'r') as file_handle:
@@ -92,7 +92,10 @@ def get_histories(cache=None):
         return histories
 
     pool = multiprocessing.Pool(100)
-    return pool.map(get_history, get_coin_names())
+    result = pool.map(get_history, get_coin_names())
+    with open('tmp_cache.json', 'w') as file_handle:
+        file_handle.write(json.dumps(result))
+    return result
 
 
 def analyze(histories):
